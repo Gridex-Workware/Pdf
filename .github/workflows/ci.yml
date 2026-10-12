@@ -38,32 +38,25 @@ jobs:
           retention-days: 7
 
   deploy:
-    # 기본 브랜치에서 모든 검사를 통과했을 때만 GitHub Pages에 배포.
-    # configure-pages의 enablement로 Pages를 자동으로 켠다(실패하면 Settings → Pages → Source를
-    # "GitHub Actions"로 한 번 설정).
+    # 기본 브랜치에서 모든 검사를 통과하면 빌드 결과를 gh-pages 브랜치로 푸시한다.
+    # GitHub Pages는 gh-pages 브랜치(루트)를 공개하도록 설정돼 있다.
     needs: test
     if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
-      contents: read
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write
     concurrency:
       group: pages
       cancel-in-progress: true
     steps:
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
-      - uses: actions/upload-pages-artifact@v3
+      - uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Deploy ${{ github.sha }}"

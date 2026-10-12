@@ -49,8 +49,8 @@ npm run build && npm run e2e   # Playwright E2E (빌드 결과를 preview 서버
 ### CI / 배포
 
 `.github/workflows/ci.yml`이 모든 푸시에서 타입 검사 → 단위 테스트 → 빌드 → E2E를 실행합니다.
-기본 브랜치에서 전부 통과하면 GitHub Pages에 배포합니다. 워크플로가 Pages를 자동으로 켜려고 시도하며,
-권한 문제로 실패하면 저장소 Settings → Pages → Source를 **GitHub Actions**로 한 번 설정하면 됩니다.
+기본 브랜치에서 전부 통과하면 빌드 결과를 `gh-pages` 브랜치로 푸시해 GitHub Pages에 배포합니다
+(Settings → Pages → Source: Deploy from a branch, `gh-pages` / root).
 
 배포 주소: https://gridex-khj.github.io/Pdf/
 
