@@ -3,7 +3,30 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "브라우저에서 동작하는 PDF 편집기 (pdf.js + pdf-lib)",
+  "description": "브라우저에서만 동작하는 PDF 편집기. 편집, 병합, 추출, 분할, 워터마크, 서명을 파일 업로드 없이 처리합니다.",
+  "keywords": [
+    "pdf",
+    "pdf-editor",
+    "pdf-merge",
+    "pdf-split",
+    "watermark",
+    "signature",
+    "pdfjs",
+    "pdf-lib",
+    "client-side",
+    "korean"
+  ],
+  "homepage": "https://gridex-khj.github.io/Pdf/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gridex-khj/Pdf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gridex-khj/Pdf/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
