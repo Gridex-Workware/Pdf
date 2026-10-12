@@ -10,6 +10,9 @@ interface ThumbView {
   check: HTMLInputElement;
   num: HTMLSpanElement;
   key: string;
+  task: { cancel(): void } | null;
+  /** 같은 캔버스에 render()가 겹치지 않도록 직렬화하는 체인 */
+  busy: Promise<void>;
 }
 
 /** 페이지 썸네일 목록. 선택/드래그 재배열/현재 페이지 표시를 담당한다. */
@@ -171,32 +174,43 @@ export class Sidebar {
       this.dragIds = [];
     });
     this.observer.observe(el);
-    return { el, canvas, check, num, key: "" };
+    return { el, canvas, check, num, key: "", task: null, busy: Promise.resolve() };
   }
 
-  private async renderThumb(v: ThumbView, page: PageRef) {
+  private renderThumb(v: ThumbView, page: PageRef): Promise<void> {
     const key = this.keyOf(page);
-    if (v.key === key) return;
+    if (v.key === key) return v.busy;
     v.key = key;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = displaySize(page);
-    const scale = THUMB_WIDTH / size.width;
-    v.canvas.width = Math.round(THUMB_WIDTH * dpr);
-    v.canvas.height = Math.round(size.height * scale * dpr);
-    const ctx = v.canvas.getContext("2d")!;
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, v.canvas.width, v.canvas.height);
-    if (!page.sourceId) return;
-    const source = this.doc.sources.get(page.sourceId);
-    if (!source) return;
-    try {
-      const proxy = await source.proxy.getPage(page.sourceIndex + 1);
+    v.task?.cancel();
+    // 이전 렌더링이 (취소 포함) 완전히 끝난 뒤에 시작해야 pdf.js가 같은 캔버스 사용을 거부하지 않는다
+    const run = v.busy.then(async () => {
       if (v.key !== key) return;
-      const viewport = proxy.getViewport({ scale: scale * dpr, rotation: displayRotation(page) });
-      await proxy.render({ canvas: v.canvas, viewport } as Parameters<typeof proxy.render>[0]).promise;
-    } catch (e) {
-      if ((e as Error)?.name !== "RenderingCancelledException") console.error(e);
-    }
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const size = displaySize(page);
+      const scale = THUMB_WIDTH / size.width;
+      v.canvas.width = Math.round(THUMB_WIDTH * dpr);
+      v.canvas.height = Math.round(size.height * scale * dpr);
+      const ctx = v.canvas.getContext("2d")!;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, v.canvas.width, v.canvas.height);
+      if (!page.sourceId) return;
+      const source = this.doc.sources.get(page.sourceId);
+      if (!source) return;
+      try {
+        const proxy = await source.proxy.getPage(page.sourceIndex + 1);
+        if (v.key !== key) return;
+        const viewport = proxy.getViewport({ scale: scale * dpr, rotation: displayRotation(page) });
+        const task = proxy.render({ canvas: v.canvas, viewport } as Parameters<typeof proxy.render>[0]);
+        v.task = task;
+        await task.promise;
+      } catch (e) {
+        if ((e as Error)?.name !== "RenderingCancelledException") console.error(e);
+      } finally {
+        v.task = null;
+      }
+    });
+    v.busy = run.catch(() => undefined);
+    return v.busy;
   }
 
   // ---- 드래그 재배열 ----

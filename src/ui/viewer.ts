@@ -6,7 +6,7 @@ import type { PDFPageProxy } from "../core/pdfjs";
 import { applyInverseTransform, applyTransform, makeViewport, type Matrix, type Viewport } from "../core/transform";
 import { HANDLE_PX, ImageCache, createCanvasMeasurer, drawOverlay, fontFor, hasResizeHandle } from "./overlay";
 
-export type Tool = "select" | "text" | "rect" | "highlight" | "ink" | "image";
+export type Tool = "select" | "text" | "rect" | "highlight" | "ink" | "image" | "whiteout";
 
 export interface StyleState {
   color: RGB;
@@ -35,6 +35,10 @@ interface PageView {
   renderTask: { cancel(): void; promise: Promise<unknown> } | null;
   renderedKey: string; // 마지막으로 그린 (scale, rotation) 키
   visible: boolean;
+  /** 아직 그리지 않았거나 그리는 중인 키 */
+  pendingKey: string;
+  /** 같은 캔버스에 render()가 겹치지 않도록 직렬화하는 체인 */
+  busy: Promise<void>;
 }
 
 type Drag =
@@ -319,6 +323,8 @@ export class Viewer {
       renderTask: null,
       renderedKey: "",
       visible: false,
+      pendingKey: "",
+      busy: Promise.resolve(),
     };
     this.layoutPage(v);
     this.observer.observe(wrap);
@@ -343,16 +349,24 @@ export class Viewer {
       c.height = Math.round(h * dpr);
     }
     v.canvas.classList.add("stale");
+    v.renderedKey = "";
     this.redrawOverlay(ref.id);
   }
 
-  private async renderPage(v: PageView) {
-    const ref = v.ref;
-    const key = `${this.scale}:${displayRotation(ref)}:${window.devicePixelRatio}`;
-    if (v.renderedKey === key) return;
+  private renderPage(v: PageView): Promise<void> {
+    const key = `${this.scale}:${displayRotation(v.ref)}:${window.devicePixelRatio}`;
+    if (v.renderedKey === key || v.pendingKey === key) return v.busy;
+    v.pendingKey = key;
     v.renderTask?.cancel();
-    v.renderTask = null;
+    // 이전 렌더링(취소 포함)이 끝난 뒤 시작해야 pdf.js가 같은 캔버스 사용을 거부하지 않는다
+    const run = v.busy.then(() => (v.pendingKey === key ? this.renderPageNow(v, key) : undefined));
+    v.busy = run.catch(() => undefined);
+    return v.busy;
+  }
 
+  private async renderPageNow(v: PageView, key: string) {
+    const ref = v.ref;
+    if (!this.views.has(ref.id)) return;
     if (!ref.sourceId) {
       const ctx = v.canvas.getContext("2d")!;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -372,6 +386,7 @@ export class Viewer {
     }
     const dpr = window.devicePixelRatio || 1;
     const viewport = v.proxy.getViewport({ scale: this.scale, rotation: displayRotation(v.ref) });
+    if (v.pendingKey !== key) return; // 그 사이 배율/회전이 바뀌었다
     const task = v.proxy.render({
       canvas: v.canvas,
       viewport,
@@ -386,6 +401,7 @@ export class Viewer {
       if ((e as Error)?.name !== "RenderingCancelledException") console.error(e);
     } finally {
       if (v.renderTask === task) v.renderTask = null;
+      if (v.pendingKey === key) v.pendingKey = "";
     }
   }
 
@@ -507,11 +523,16 @@ export class Viewer {
         return;
       }
       case "rect":
-      case "highlight": {
+      case "highlight":
+      case "whiteout": {
+        const base = { id: newId("an"), x: pdf.x, y: pdf.y, width: 0, height: 0 };
         const draft: Annotation =
           this.tool === "rect"
-            ? { id: newId("an"), type: "rect", x: pdf.x, y: pdf.y, width: 0, height: 0, strokeColor: s.color, fillColor: s.fillColor, strokeWidth: s.strokeWidth, opacity: s.opacity }
-            : { id: newId("an"), type: "highlight", x: pdf.x, y: pdf.y, width: 0, height: 0, color: s.color, opacity: Math.min(s.opacity, 0.5) };
+            ? { ...base, type: "rect", strokeColor: s.color, fillColor: s.fillColor, strokeWidth: s.strokeWidth, opacity: s.opacity }
+            : this.tool === "highlight"
+              ? { ...base, type: "highlight", color: s.color, opacity: Math.min(s.opacity, 0.5) }
+              : // 흰색 덮기: 기존 내용을 가리는 불투명 흰 사각형
+                { ...base, type: "rect", strokeColor: { r: 1, g: 1, b: 1 }, fillColor: { r: 1, g: 1, b: 1 }, strokeWidth: 0, opacity: 1 };
         this.drag = { kind: "draw", pageId, start: pdf, draft };
         v.overlay.setPointerCapture(e.pointerId);
         return;

@@ -1,7 +1,7 @@
 import type { Annotation, ImageAsset, PageRef, Rotation } from "./model";
 import { newId, normalizeRotation } from "./model";
 import { insertAt, movePage, removePages, rotatePages } from "./pageops";
-import { pdfjs, type PDFDocumentProxy } from "./pdfjs";
+import { loadPdfjs, type PDFDocumentProxy } from "./pdfjs";
 
 export interface SourceDoc {
   id: string;
@@ -84,6 +84,7 @@ export class EditorDocument {
 
   /** PDF 바이트를 읽어 소스로 등록하고 페이지 참조 목록을 만든다 */
   private async loadSource(bytes: Uint8Array, name: string): Promise<{ source: SourceDoc; pages: PageRef[] }> {
+    const pdfjs = await loadPdfjs();
     // pdf.js는 전달된 버퍼를 워커로 넘기므로(transfer) 사본을 준다
     const proxy = await pdfjs.getDocument({ data: bytes.slice() }).promise;
     const source: SourceDoc = { id: newId("src"), name, bytes, proxy };
@@ -182,6 +183,38 @@ export class EditorDocument {
       "annotations",
       { pageId },
     );
+  }
+
+  addAnnotations(pageId: string, annots: Annotation[]) {
+    if (annots.length === 0) return;
+    this.commit(
+      this.pages.map((p) => (p.id === pageId ? { ...p, annotations: [...p.annotations, ...annots] } : p)),
+      "annotations",
+      { pageId },
+    );
+  }
+
+  private batchDepth = 0;
+  private batchBefore: PageRef[] | null = null;
+
+  /** 여러 변경을 실행취소 한 단계로 묶는다 */
+  batch(fn: () => void) {
+    if (this.batchDepth === 0) this.batchBefore = this.pages;
+    this.batchDepth++;
+    try {
+      fn();
+    } finally {
+      this.batchDepth--;
+      if (this.batchDepth === 0 && this.batchBefore) {
+        // commit()이 쌓은 중간 이력을 시작 상태 하나로 합친다
+        const before = this.batchBefore;
+        this.batchBefore = null;
+        if (this.pages === before) return; // 아무 변경도 없었다
+        while (this.undoStack.length && this.undoStack[this.undoStack.length - 1] !== before) this.undoStack.pop();
+        if (this.undoStack[this.undoStack.length - 1] !== before) this.undoStack.push(before);
+        this.emit("pages");
+      }
+    }
   }
 
   updateAnnotation(pageId: string, annotId: string, patch: Partial<Annotation>, record = true) {

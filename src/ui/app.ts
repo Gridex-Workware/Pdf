@@ -1,5 +1,8 @@
 import { EditorDocument } from "../core/document";
-import { downloadBytes, exportPdf } from "../core/export";
+import { downloadBytes, exportDocument, exportZip } from "../core/export-client";
+import { createCanvasMeasurer } from "./overlay";
+import { openStampPanel } from "./stamps";
+import { openWatermarkDialog } from "./watermark-dialog";
 import { ensureCssFont } from "../core/fonts";
 import type { Annotation, ImageAsset, RGB } from "../core/model";
 import { hexToRgb, newId, rgbToHex } from "../core/model";
@@ -15,6 +18,7 @@ const TOOLS: { id: Tool; label: string; key: string; title: string }[] = [
   { id: "highlight", label: "형광펜", key: "H", title: "형광펜 (H)" },
   { id: "ink", label: "펜", key: "P", title: "자유 곡선 (P)" },
   { id: "image", label: "이미지", key: "I", title: "이미지 삽입 (I)" },
+  { id: "whiteout", label: "흰색 덮기", key: "W", title: "기존 내용을 흰색으로 가리기 (W)" },
 ];
 
 function button(label: string, title: string, onClick: () => void, cls = ""): HTMLButtonElement {
@@ -78,6 +82,7 @@ export class App {
   readonly doc = new EditorDocument();
   readonly viewer: Viewer;
   readonly sidebar: Sidebar;
+  private measure = createCanvasMeasurer();
   private toolButtons = new Map<Tool, HTMLButtonElement>();
   private undoBtn!: HTMLButtonElement;
   private redoBtn!: HTMLButtonElement;
@@ -156,7 +161,11 @@ export class App {
       this.toolButtons.set(t.id, b);
       bar.appendChild(b);
     }
-    bar.appendChild(separator());
+    bar.append(
+      button("서명/도장", "저장된 서명이나 도장을 페이지에 놓기 (S)", () => this.openStamps()),
+      button("워터마크", "글자/이미지 워터마크를 페이지에 추가", () => this.openWatermark()),
+      separator(),
+    );
 
     // 속성
     const props = document.createElement("div");
@@ -248,6 +257,7 @@ export class App {
       }),
       button("빈 쪽", "현재 페이지 뒤에 빈 페이지 추가", () => this.insertBlank()),
       button("추출", "선택 페이지를 새 PDF로 내려받기", () => void this.extract()),
+      button("분할 ZIP", "선택(없으면 전체) 페이지를 한 쪽씩 PDF로 나눠 ZIP으로 내려받기", () => void this.splitZip()),
       button("삭제", "선택 페이지 삭제", () => this.deletePages(), "danger"),
     );
     sb.el.insertBefore(bar, sb.list);
@@ -267,7 +277,8 @@ export class App {
         <div class="empty-actions"></div>
         <ul>
           <li>페이지 회전 · 삭제 · 순서 변경 · 복제 · 병합 · 추출</li>
-          <li>텍스트(한글 지원) · 사각형 · 형광펜 · 펜 · 이미지 삽입</li>
+          <li>텍스트(한글 지원) · 사각형 · 형광펜 · 펜 · 이미지 · 서명/도장 · 워터마크 · 흰색 덮기</li>
+          <li>페이지별 분할 ZIP 내려받기</li>
           <li>모든 처리는 브라우저 안에서만 이루어집니다. 파일이 서버로 전송되지 않습니다.</li>
         </ul>
       </div>`;
@@ -359,7 +370,7 @@ export class App {
     if (this.doc.isEmpty) return toast("저장할 페이지가 없습니다", "error");
     this.viewer.commitEditor();
     try {
-      const { bytes, warnings } = await exportPdf(this.doc);
+      const { bytes, warnings } = await exportDocument(this.doc);
       downloadBytes(bytes, `${this.doc.name}-편집.pdf`);
       for (const w of warnings) toast(w, "error", 6000);
       toast("PDF가 저장되었습니다");
@@ -382,12 +393,59 @@ export class App {
       }
     }
     try {
-      const { bytes, warnings } = await exportPdf(this.doc, { pageIds: ids });
+      const { bytes, warnings } = await exportDocument(this.doc, ids);
       downloadBytes(bytes, `${this.doc.name}-추출(${ids.length}쪽).pdf`);
       for (const w of warnings) toast(w, "error", 6000);
     } catch (e) {
       toast(`추출 실패: ${(e as Error).message}`, "error", 6000);
     }
+  }
+
+  /** 페이지를 한 쪽씩 PDF로 나눠 ZIP으로 내려받기 */
+  async splitZip() {
+    if (this.doc.isEmpty) return;
+    this.viewer.commitEditor();
+    const selected = this.doc.pages.filter((p) => this.sidebar.selected.has(p.id));
+    const pages = selected.length > 0 ? selected : this.doc.pages;
+    const digits = String(this.doc.pages.length).length;
+    const groups = pages.map((p) => ({
+      name: `${this.doc.name}-${String(this.doc.pageIndex(p.id) + 1).padStart(digits, "0")}.pdf`,
+      pageIds: [p.id],
+    }));
+    toast(`${groups.length}개 파일로 나누는 중…`);
+    try {
+      const { bytes, warnings } = await exportZip(this.doc, groups);
+      downloadBytes(bytes, `${this.doc.name}-분할.zip`, "application/zip");
+      for (const w of warnings) toast(w, "error", 6000);
+      toast(`ZIP(${groups.length}개 PDF)이 저장되었습니다`);
+    } catch (e) {
+      toast(`분할 실패: ${(e as Error).message}`, "error", 6000);
+    }
+  }
+
+  openStamps() {
+    openStampPanel((asset) => {
+      this.doc.addAsset(asset);
+      this.viewer.pendingImage = asset;
+      this.setTool("image");
+      toast("서명/도장을 놓을 위치를 페이지에서 클릭하세요");
+    });
+  }
+
+  openWatermark() {
+    if (this.doc.isEmpty) return toast("먼저 PDF를 여세요", "error");
+    this.viewer.commitEditor();
+    const selected = this.doc.pages.filter((p) => this.sidebar.selected.has(p.id)).map((p) => p.id);
+    openWatermarkDialog(this.doc, this.measure, selected, async () => {
+      const [file] = await pickFiles("image/*");
+      if (!file) return null;
+      try {
+        return await loadImageAsset(file);
+      } catch (e) {
+        toast((e as Error).message, "error");
+        return null;
+      }
+    });
   }
 
   private zoomBy(f: number) {
@@ -430,13 +488,13 @@ export class App {
         rgbToHex(s.color),
         !!s.fillColor,
         s.fillColor,
-        t === "text" || t === "highlight" || t === "image" ? null : s.strokeWidth,
+        t === "text" || t === "highlight" || t === "image" || t === "whiteout" ? null : s.strokeWidth,
         t === "text" || t === "select" ? s.fontSize : null,
         s.opacity,
       );
       p.fillOn.disabled = t !== "rect" && t !== "select";
       p.fill.disabled = p.fillOn.disabled || !s.fillColor;
-      p.color.disabled = t === "image";
+      p.color.disabled = t === "image" || t === "whiteout";
       return;
     }
     p.fillOn.disabled = a.type !== "rect";
@@ -541,6 +599,10 @@ export class App {
         this.viewer.pendingImage = null;
         this.viewer.select(null);
         this.setTool("select");
+        return;
+      }
+      if (e.key.toLowerCase() === "s") {
+        this.openStamps();
         return;
       }
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());

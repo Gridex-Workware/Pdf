@@ -77,7 +77,7 @@ button.danger { color: var(--danger); }
 /* 뷰어 */
 .viewer { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .viewer[data-tool="text"] .page-wrap { cursor: text; }
-.viewer[data-tool="rect"] .page-wrap, .viewer[data-tool="highlight"] .page-wrap, .viewer[data-tool="ink"] .page-wrap, .viewer[data-tool="image"] .page-wrap { cursor: crosshair; }
+.viewer[data-tool="rect"] .page-wrap, .viewer[data-tool="highlight"] .page-wrap, .viewer[data-tool="ink"] .page-wrap, .viewer[data-tool="image"] .page-wrap, .viewer[data-tool="whiteout"] .page-wrap { cursor: crosshair; }
 .page-wrap { position: relative; flex-shrink: 0; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.25); touch-action: none; }
 .page-canvas, .overlay-canvas { position: absolute; left: 0; top: 0; display: block; }
 .page-canvas.stale { opacity: 0.6; }
@@ -110,3 +110,27 @@ button.danger { color: var(--danger); }
   .sidebar { width: 150px; }
   .props .field span { display: none; }
 }
+
+/* 대화상자 */
+.dialog-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: grid; place-items: center; z-index: 50; }
+.dialog { background: var(--panel); border-radius: 12px; padding: 18px 20px; min-width: 360px; max-width: 92vw; max-height: 90vh; overflow: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
+.dialog h2 { margin: 0 0 12px; font-size: 17px; }
+.dialog .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.dialog .row > span:first-child { width: 72px; color: var(--muted); font-size: 13px; flex-shrink: 0; }
+.dialog input[type="text"], .dialog input[type="number"], .dialog select, .dialog textarea { flex: 1; height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font: inherit; }
+.dialog input[type="color"] { width: 36px; height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 2px; background: #fff; }
+.dialog input[type="range"] { flex: 1; }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.dialog button { height: 32px; padding: 0 14px; border: 1px solid var(--border); border-radius: 6px; background: #f8fafc; cursor: pointer; font: inherit; }
+.dialog button:hover { background: #eef2f7; }
+.dialog .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.dialog .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sig-canvas { width: 420px; height: 160px; border: 1px dashed var(--border); border-radius: 8px; background: #fff; touch-action: none; display: block; }
+.stamp-list { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow: auto; margin-top: 8px; }
+.stamp-item { position: relative; width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 6px; cursor: pointer; background: #fff; text-align: center; }
+.stamp-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+.stamp-item img { max-width: 100%; max-height: 60px; display: block; margin: 0 auto 4px; }
+.stamp-item .name { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stamp-item .remove { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: none; border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff; font-size: 11px; line-height: 18px; }
+.sig-text-preview { font-family: "Brush Script MT", "Segoe Script", "Nanum Pen Script", cursive; font-size: 40px; color: #1e3a8a; padding: 10px 16px; border: 1px dashed var(--border); border-radius: 8px; min-height: 64px; }
+.wm-preview { font-size: 13px; color: var(--muted); }
