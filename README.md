@@ -1,12 +1,15 @@
 # PDF 편집기
 
-[![CI](https://github.com/gridex-khj/Pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/gridex-khj/Pdf/actions/workflows/ci.yml)
-[![GitHub Pages](https://img.shields.io/badge/demo-gridex--khj.github.io%2FPdf-2563eb)](https://gridex-khj.github.io/Pdf/)
+> 소속: [Gridex-Workware](https://github.com/Gridex-Workware) · 저장소: [Gridex-Workware/Pdf](https://github.com/Gridex-Workware/Pdf) · 공개
+
+
+[![CI](https://github.com/Gridex-Workware/Pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/Gridex-Workware/Pdf/actions/workflows/ci.yml)
+[![GitHub Pages](https://img.shields.io/badge/demo-gridex--workware.github.io%2FPdf-2563eb)](https://gridex-workware.github.io/Pdf/)
 
 브라우저에서만 동작하는 PDF 편집기입니다. 설치나 회원가입 없이 PDF를 열어 편집, 병합, 추출, 분할하고 워터마크와 서명을 넣을 수 있습니다.
 파일은 서버로 전송되지 않고 모든 처리가 내 컴퓨터의 브라우저 안에서 이루어집니다.
 
-**바로 사용하기: https://gridex-khj.github.io/Pdf/**
+**바로 사용하기: https://gridex-workware.github.io/Pdf/**
 
 ![PDF 편집기 화면](docs/screenshot.png)
 
